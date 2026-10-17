@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eyabantu Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="{{ url_for('main.dashboard') }}">Eyabantu</a>
+            <div class="d-flex align-items-center text-white">
+                <span class="me-3 small">
+                    {{ session.get('user_name') }} 
+                    <span class="badge bg-secondary ms-1 text-uppercase">{{ session.get('role') }}</span>
+                </span>
+                <a href="{{ url_for('main.logout') }}" class="btn btn-outline-light btn-sm">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% if session.get('role') == 'driver' and driver_taxi %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-1">My Vehicle: {{ driver_taxi.registration }}</h5>
+                    <span class="text-muted small">Current Status: <strong>{{ driver_taxi.status }}</strong></span>
+                </div>
+                <form method="POST" action="{{ url_for('main.update_taxi_status') }}" class="d-flex gap-2">
+                    <input type="hidden" name="taxi_id" value="{{ driver_taxi.id }}">
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="loading" {% if driver_taxi.status == 'loading' %}selected{% endif %}>Loading at Rank</option>
+                        <option value="en_route" {% if driver_taxi.status == 'en_route' %}selected{% endif %}>En Route</option>
+                        <option value="off_duty" {% if driver_taxi.status == 'off_duty' %}selected{% endif %}>Off Duty</option>
+                    </select>
+                    <button type="submit" class="btn btn-primary btn-sm">Update</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="row g-4 mb-4">
+            <div class="col-md-8">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-white fw-bold py-3">Active Corridor Routes</div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Route Name</th>
+                                    <th>Fare</th>
+                                    <th>Avg Speed</th>
+                                    <th>En Route</th>
+                                    <th>Loading</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in routes %}
+                                <tr>
+                                    <td><span class="badge bg-dark">{{ r.code }}</span></td>
+                                    <td class="fw-medium">{{ r.name }}</td>
+                                    <td>R {{ "%.2f"|format(r.fare_zar) }}</td>
+                                    <td>{{ r.avg_speed_kmh }} km/h</td>
+                                    <td><span class="badge bg-success">{{ r.active_taxis }} taxis</span></td>
+                                    <td><span class="badge bg-warning text-dark">{{ r.loading_taxis }} taxis</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-white fw-bold">Drop Demand Pin</div>
+                    <div class="card-body">
+                        <form method="POST" action="{{ url_for('main.add_pin') }}">
+                            <div class="mb-2">
+                                <label class="form-label small">Route & Stop</label>
+                                <select name="stop_id" class="form-select form-select-sm" required onchange="document.getElementById('pin_route_id').value = this.options[this.selectedIndex].dataset.route">
+                                    {% for s in stops %}
+                                    <option value="{{ s.stop_id }}" data-route="{{ s.route_id }}">
+                                        R{{ s.route_id }} - {{ s.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <input type="hidden" id="pin_route_id" name="route_id" value="{{ stops[0].route_id if stops else 1 }}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small">Type</label>
+                                <select name="pin_type" class="form-select form-select-sm">
+                                    <option value="pickup">Waiting for Pickup</option>
+                                    <option value="dropoff">Drop-off Request</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-dark btn-sm w-100">Submit Pin</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white fw-bold">Log Stop Safety Rating</div>
+                    <div class="card-body">
+                        <form method="POST" action="{{ url_for('main.rate_stop') }}">
+                            <div class="mb-2">
+                                <select name="stop_id" class="form-select form-select-sm" required>
+                                    {% for s in stops %}
+                                    <option value="{{ s.stop_id }}">{{ s.name }} (Route {{ s.route_id }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <select name="rating" class="form-select form-select-sm" required>
+                                    <option value="5">5 - Very Safe</option>
+                                    <option value="4">4 - Safe</option>
+                                    <option value="3">3 - Moderate</option>
+                                    <option value="2">2 - Unsafe</option>
+                                    <option value="1">1 - Critical Risk</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-outline-dark btn-sm w-100">Submit Rating</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-md-7">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white fw-bold py-3">Corridor Stops, Demand & Safety</div>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Route</th>
+                                    <th>Seq</th>
+                                    <th>Stop Name</th>
+                                    <th>Distance</th>
+                                    <th>Demand Pins</th>
+                                    <th>Safety Score</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for s in stops %}
+                                <tr>
+                                    <td>R{{ s.route_id }}</td>
+                                    <td>#{{ s.seq }}</td>
+                                    <td>
+                                        {{ s.name }}
+                                        {% if s.is_rank %}<span class="badge bg-info text-dark ms-1">Rank</span>{% endif %}
+                                    </td>
+                                    <td>{{ s.km_from_start }} km</td>
+                                    <td>{{ s.recent_demand }}</td>
+                                    <td>
+                                        {% if s.safety_score %}
+                                            <span class="badge bg-secondary">{{ s.safety_score }} / 5.0</span>
+                                        {% else %}
+                                            <span class="text-muted small">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-5">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white fw-bold py-3">Registered Fleet Status</div>
+                    <div class="table-responsive" style="max-height: 400px;">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Registration</th>
+                                    <th>Route</th>
+                                    <th>Driver</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for t in taxis %}
+                                <tr>
+                                    <td class="fw-medium">{{ t.registration }}</td>
+                                    <td>{{ t.route_code }}</td>
+                                    <td>{{ t.driver_name }}</td>
+                                    <td>
+                                        {% if t.status == 'en_route' %}
+                                            <span class="badge bg-success">En Route</span>
+                                        {% elif t.status == 'loading' %}
+                                            <span class="badge bg-warning text-dark">Loading</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Off Duty</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
